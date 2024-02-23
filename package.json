@@ -1,0 +1,31 @@
+{
+  "name": "@zimjs/cam",
+  "version": "1.2.0",
+  "description": "Cam module for ZIM JavaScript Canvas Framework",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danzen/zim-cam.git"
+  },
+  "keywords": [
+    "cam",
+    "camera",
+    "webcam",
+    "cam",
+    "motion",
+    "motion",
+    "capture",
+    "zim",
+    "zimjs"
+  ],
+  "author": "Dr Abstract",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "zimjs": "^16.0.4"
+  }
+}
