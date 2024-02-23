@@ -1,6 +1,6 @@
 ![cam](https://github.com/danzen/zim-cam/assets/380281/1725004b-7b50-4405-beda-65be4279cbc6)
 
-Cam is a helper module for the ZIM JavaScript Canvas Framework at https://zimjs.com. With the module you can shows a Webcam, and place objects at where there is motion.  
+Cam is a helper module for the ZIM JavaScript Canvas Framework at https://zimjs.com. With the module you can show a Webcam, and place objects at where there is motion.  
 A cursor can follow your finger.  Or you can set interactive regions that capture motion.
 Multiple CamCursor objects can be used for instance to play a game of pong with paddles on each side.
 
