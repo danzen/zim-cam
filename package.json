@@ -1,6 +1,6 @@
 {
   "name": "@zimjs/cam",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Cam module for ZIM JavaScript Canvas Framework",
   "main": "index.js",
   "types": "index.d.ts",

@@ -240,6 +240,7 @@ zim.CamMotion = function(obj, preview, smooth, damp, sensitivity, precision, per
 	if (zot(mode)) mode = 0; // 0 red, 1 green, 2 blue 
 	if (mode != 0 && mode != 1 && mode != 2) mode = 0;
 	if (!zot(visualizerObj) && !visualizerObj.type) visualizerObj = "circle";
+	if (zot(visualizerObj) && (!zot(visualizerColor) || !zot(visualizerBaseColor) || !zot(visualizerScale) || !zot(visualizerBaseScale))) visualizerObj = "circle";
 	if (zot(visualizerColor)) visualizerColor = zim.red;  
 	if (zot(visualizerBaseColor)) visualizerBaseColor = zim.dark; 
 	if (zot(visualizerScale)) visualizerScale = 1;  
