@@ -1,6 +1,6 @@
 {
   "name": "@zimjs/cam",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Cam module for ZIM JavaScript Canvas Framework",
   "main": "index.js",
   "types": "index.d.ts",
@@ -26,6 +26,10 @@
   "license": "MIT",
   "devDependencies": {
     "typescript": "^5.3.3",
-    "zimjs": "^16.1.4"
+    "zimjs": "^17.3.3"
+  },
+  "peerDependencies": {
+    "zimjs": "^17.3.3"
   }
+  
 }
