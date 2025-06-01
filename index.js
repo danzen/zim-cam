@@ -28,7 +28,10 @@ zim.Cam = function(width, height, flip, facingMode, config) {
 	if (zot(height)) height = 480;
 	if (zot(flip)) flip = true;
 	if (zot(facingMode)) facingMode = true; // or "user", "environment", "exact_user" or "exact_environment"
-	if (zot(config)) config = true;
+	if (zot(config)) config = {
+		width: width,
+		height: height
+	};
 							
 	this.zimContainer_constructor(width, height);
 	this.type = "Cam";        
@@ -82,8 +85,14 @@ zim.Cam = function(width, height, flip, facingMode, config) {
 						cam.regX = -cam.width/(cam.scaleX?cam.scaleX:1);
 					}                                                 
 					that.resetSize = function() {
+						w = video.videoWidth?video.videoWidth:width;
+						h = video.videoHeight?video.videoHeight:height;
 						that.setBounds(0,0,w,h);
 						cam.sca(1,1);
+						if (flip) {
+							cam.scaleX *= -1;  
+							cam.regX = -cam.width/(cam.scaleX?cam.scaleX:1);
+						}    
 						return that;
 					} 
 					that.snapshot = function() {
@@ -145,6 +154,18 @@ zim.Cam = function(width, height, flip, facingMode, config) {
 						}
 						return that;
 					}
+					that.getCanvas = function() {
+						that.display.cache();
+						that.canvasTicker = zim.Ticker.add(function(){
+							that.display.updateCache();
+						})
+						return that.display.cacheCanvas;
+					}
+					that.forgetCanvas = function() {
+						that.display.uncache();
+						zim.Ticker.remove(that.canvasTicker);
+						return that;
+					}
 					Object.defineProperty(that, 'paused', {
 						get: function() {
 							return _paused;
@@ -190,7 +211,428 @@ zim.Cam = function(width, height, flip, facingMode, config) {
 						Ticker.alwaysOff();
 						if (!disposing) that.zimContainer_dispose(true);
 						return true;
-					}                  
+					}          
+					
+					// ----------------------------------------
+					// ML5 SUPPORT
+									
+					var cam = that;
+
+					var S;
+					var F;
+					var W;
+					var H;
+
+					cam.prepareTrack = function(width, height, hand, pinchColor, pinchHide, leftColor, rightColor, handScale, handAlpha, damp, gapTime, tapTime, cursorMode, toggleReplace) {
+						
+						S = that.stage || zdf.stage;
+						F = that.stage.frame;
+						W = S.width;
+						H = S.height;
+
+						if (zot(width)) width = W;
+						if (zot(height)) height = H;
+						if (zot(hand)) hand = RIGHT; 
+						if (zot(pinchColor)) pinchColor = white; 
+						if (zot(pinchHide)) pinchHide = true; 
+						if (zot(leftColor)) leftColor = green; 
+						if (zot(rightColor)) rightColor = blue; 
+						if (zot(handScale)) handScale = 1; 
+						if (zot(handAlpha)) handAlpha = .5; 
+						if (zot(damp)) damp = .5; 
+						if (zot(gapTime)) gapTime = .5; 
+						if (zot(tapTime)) tapTime = .3; 
+						if (zot(cursorMode)) cursorMode = "auto";  // true - always, auto - when hands, false - do not replace  
+						that._cursorMode = cursorMode;                         
+						if (zot(toggleReplace)) toggleReplace = true;  // allow pinching both hands together to toggle cursor replacement
+						
+						cam.dots = new zim.Container(width,height).alp(handAlpha).noMouse();
+			
+						if (hand==LEFT || hand==BOTH) {
+							cam.leftFinger = makeFinger(leftColor);
+							cam.leftThumb = makeThumb(leftColor);
+							cam.leftPinch = makePinch();                                
+						}
+						if (hand==RIGHT || hand==BOTH) {
+							cam.rightFinger = makeFinger(rightColor);
+							cam.rightThumb = makeThumb(rightColor);
+							cam.rightPinch = makePinch();
+						}
+						cam._hand = hand;
+						function makeFinger(color) {
+							var finger = new zim.Circle(25,color).sca(handScale);
+							finger.remove = false;
+							finger.active = false;
+							finger.dampX = new zim.Damp(null, damp);
+							finger.dampY = new zim.Damp(null, damp);
+							finger.desiredX = null;
+							finger.desiredY = null;
+							return finger;
+						}
+						function makeThumb(color) {
+							var thumb = new zim.Circle(40,clear,color).sca(handScale);
+							thumb.dampX = new zim.Damp(null, damp);
+							thumb.dampY = new zim.Damp(null, damp);
+							thumb.desiredX = null;
+							thumb.desiredY = null;
+							return thumb;
+						}
+						function makePinch() {
+							var pinch = new zim.Circle(10, pinchColor, black);
+							pinch.remove = null;
+							pinch.active = null;
+							return pinch;
+						}
+						
+						cam.gapTime = gapTime;
+						cam.tapTime = tapTime;
+						that._replaceCursor = false;
+						cam.toggleReplace = toggleReplace;
+			
+						if (that._cursorMode===true) { // note - not auto
+							if (!createjs.remoteQueue) createjs.remoteQueue = [];
+							if (!createjs.remotePointers) createjs.addRemotePointers(S, F.canvas);
+							zim.handCursor = true;
+							that._replaceCursor = true;
+						}
+							
+						// hide real cursor 
+						// possibly make user cursors - work it in with ZIM CURSORS                           
+						// make a cursor stats variable - which cursors are we using
+			
+						cam.pinchTicker = Ticker.add(function() {                                                
+							if ((cam._hand==LEFT || cam._hand==BOTH) && cam.leftFinger.active) fingerTest(cam.leftFinger, cam.leftThumb, cam.leftPinch, 1);
+							if ((cam._hand==RIGHT || cam._hand==BOTH) && cam.rightFinger.active) fingerTest(cam.rightFinger, cam.rightThumb, cam.rightPinch, 2);
+							if (cam.toggleReplace) toggleTest();
+							cam.dots.top();             
+						});
+			
+						var toggleCheck = true;
+						function toggleTest() {
+
+							var hittingRight = (cam._hand==RIGHT || cam._hand==BOTH) && cam.rightFinger.active && cam.rightThumb.hitTestCirclePoint(cam.rightThumb.otherX, cam.rightThumb.otherY);
+							var hittingLeft = (cam._hand==LEFT || cam._hand==BOTH) && cam.leftFinger.active && cam.leftThumb.hitTestCirclePoint(cam.leftThumb.otherX, cam.leftThumb.otherY)  
+
+							if (toggleCheck) {                                    
+								if (that._replaceCursor && (hittingRight || hittingLeft)) {
+									clearDown();
+									createjs.removeRemotePointers(S);
+									that._replaceCursor = zim.handCursor = false;
+									if (hittingRight) cam.rightThumb.color = red;
+									if (hittingLeft) cam.leftThumb.color = red;                                        
+									toggleCheck = false;
+									that.dispatchEvent("replaceoff");
+									setTimeout(setBack, 500);                                       
+								} else if (!that._replaceCursor && (hittingRight || hittingLeft)) {
+									createjs.addRemotePointers(S, F.canvas);
+									that._replaceCursor = zim.handCursor = true;
+									if (hittingRight) cam.rightThumb.color = rightColor;
+									if (hittingLeft) cam.leftThumb.color = leftColor;
+									toggleCheck = false;
+									that.dispatchEvent("replaceon");
+									setTimeout(setBack, 500);
+								}
+							}                                  
+
+							// // TWO PINCHES TOUCHING - only works with two hands
+							// if (toggleCheck && cam.replaceCursor && cam.leftPinch.active && cam.rightPinch.active && cam.leftPinch.hitTestCircles(cam.rightPinch)) {
+							//     createjs.removeRemotePointers(S);
+							//     cam.replaceCursor = zim.handCursor = false;
+							//     toggleCheck = false;
+							// } else if (toggleCheck && !cam.replaceCursor && cam.leftPinch.active && cam.rightPinch.active && cam.leftPinch.hitTestCircles(cam.rightPinch)) {
+							//     createjs.addRemotePointers(S, F.canvas);
+							//     cam.replaceCursor = zim.handCursor = true;
+							//     toggleCheck = false;
+							// }
+							// if (!toggleCheck && !cam.leftPinch.hitTestCircles(cam.rightPinch)) toggleCheck = true;
+						}
+
+						function clearDown(type) {
+							if (zot(type)) type == BOTH;
+							if ((type==LEFT || type==BOTH) && (cam._hand==LEFT || cam._hand==BOTH) && cam.leftPinch.active) doClear(cam.leftPinch, 1);
+							if ((type==RIGHT || type==BOTH) && (cam._hand==RIGHT || cam._hand==BOTH) && cam.rightPinch.active) doClear(cam.rightPinch, 2);
+						}
+						function doClear(pinch, index) {
+							pinch.active = false;
+							pinch.removeFrom();                                       
+							if (that._replaceCursor) createjs.handleRemotePointer(null, null, "up", null, S, index);
+							cam.dispatchEvent("handup");
+							clearTimeout(pinch.timeout);
+							pinch.timeout = null;
+						}
+
+						function setBack() {
+							toggleCheck = true;
+							if (cam._hand==RIGHT || cam._hand==BOTH) cam.rightThumb.color = clear;
+							if (cam._hand==LEFT || cam._hand==BOTH) cam.leftThumb.color = clear;
+						}
+			
+						function fingerTest(finger, thumb, pinch, index) {
+			
+							finger.x = finger.dampX.convert(finger.desiredX);
+							finger.y = finger.dampY.convert(finger.desiredY);
+							thumb.x = thumb.dampX.convert(thumb.desiredX);
+							thumb.y = thumb.dampY.convert(thumb.desiredY);
+							
+							if (that._replaceCursor) {
+								if (pinch.active) createjs.handleRemotePointer(pinch.x, pinch.y, "move", null, S, index);
+								else createjs.handleRemotePointer(finger.x, finger.y, "move", null, S, index);	
+							}
+							cam.dispatchEvent("handmove");
+			
+							// PINCH TEST
+							if (finger.hitTestCircles(thumb)) { // pinch hitting
+								if (finger.visible) pinch.visible = true;
+								pinch.x = (finger.x+thumb.x)/2;
+								pinch.y = (finger.y+thumb.y)/2;
+								if (!pinch.active) {
+									pinch.addTo(cam.dots);
+									if (pinchHide) {
+											finger.alp(.1);
+										thumb.alp(.1);
+									}
+									pinch.time = Date.now();
+									pinch.active = true;							
+									if (that._replaceCursor) createjs.handleRemotePointer(pinch.x, pinch.y, "down", null, S, index); 
+									cam.dispatchEvent("handdown");
+								}
+								if (pinch.remove) {
+									pinch.remove = false;
+									clearTimeout(pinch.timeout);
+									pinch.timeout = null;
+								}
+							} else { // pinch not hitting
+								pinch.visible = false;
+								if (pinchHide) {
+									finger.alp(1);
+									thumb.alp(1);
+								}
+								// up in less than tapTime ms - like a click so immediately count the up
+								if (Date.now()-pinch.time < cam.tapTime*1000) {
+									pinch.active = false;
+									pinch.removeFrom();                                       
+									if (that._replaceCursor) createjs.handleRemotePointer(null, null, "up", null, S, index);
+									cam.dispatchEvent("handup");
+								} else { // could be a glitch as trying to drag something for instance
+									if (!pinch.remove) {                                            
+										pinch.remove = true;                                            
+										pinch.timeout = setTimeout(function(){
+											pinch.active = false;
+											pinch.removeFrom();                                                
+											if (that._replaceCursor) createjs.handleRemotePointer(null, null, "up", null, S, index); 
+											cam.dispatchEvent("handup");
+										}, cam.gapTime*1000); 
+									}
+								}
+							}		
+						}  // also see interval that checks for left becoming inactive
+
+							Object.defineProperty(that, 'hand', {
+							get: function() {
+								return that._hand;
+							},
+							set: function(value) {
+								if (that._hand==value) return;
+								if (that._hand!=RIGHT && value==RIGHT) clearDown(RIGHT);
+								if (that._hand!=LEFT && value==LEFT) clearDown(LEFT);
+								if ((value==LEFT || value==BOTH) && !cam.leftFinger) {
+									cam.leftFinger = makeFinger(leftColor);
+									cam.leftThumb = makeThumb(leftColor);
+									cam.leftPinch = makePinch();                                
+								}
+								if ((value==RIGHT || value==BOTH) && !cam.rightFinger) {
+									cam.rightFinger = makeFinger(rightColor);
+									cam.rightThumb = makeThumb(rightColor);
+									cam.rightPinch = makePinch();
+								}
+								if (value==LEFT && cam.rightFinger.parent) {
+									cam.rightFinger.removeFrom();
+									cam.rightThumb.removeFrom();
+									cam.rightFinger.active = false;
+								} else if (value==RIGHT && cam.leftFinger.parent) {
+									cam.leftFinger.removeFrom();
+									cam.leftThumb.removeFrom();
+									cam.leftFinger.active = false;
+								}
+								that._hand = value;
+							}
+						});
+
+						Object.defineProperty(that, 'replaceCursor', {
+							get: function() {
+								return that._replaceCursor;
+							},
+							set: function(value) {
+								if (that._replaceCursor==value) return;                     
+								if (value) {
+									createjs.addRemotePointers(S, F.canvas);
+									that._replaceCursor = zim.handCursor = true;
+									setTimeout(setBack, 500);                    
+								} else {
+									clearDown();
+									createjs.removeRemotePointers(S);
+									that._replaceCursor = zim.handCursor = false;                                       
+								}
+							}
+						});
+
+						Object.defineProperty(that, 'cursorMode', {
+							get: function() {
+								return that._cursorMode;
+							},
+							set: function(value) {
+								if (that._cursorMode==value) return;
+								if (that._cursorMode===true) {
+									var active = (that.leftHand && that.leftHand.active==true) || (that.rightHand && that.rightHand.active==true);
+									if (value===false || !active) {
+										createjs.removeRemotePointers(S);
+										that._replaceCursor = zim.handCursor = false; 
+									}
+								}        
+								if (value===true) {                                      
+									if (!createjs.remoteQueue) createjs.remoteQueue = [];
+									if (!createjs.remotePointers) createjs.addRemotePointers(S, F.canvas);
+									that._replaceCursor = zim.handCursor = true;   
+								}
+								that._cursorMode = value;
+							}
+						});                            
+
+						Object.defineProperty(that, 'handScale', {
+							get: function() {
+								return handScale;
+							},
+							set: function(value) {
+								if (handScale==value) return;
+								if (that.leftFinger) that.leftFinger.scale = value;
+								if (that.rightFinger) that.rightFinger.scale = value;
+								if (that.leftThumb) that.leftThumb.scale = value;
+								if (that.rightThumb) that.rightThumb.scale = value;
+								handScale = value;
+							}
+						});
+						
+						cam.dots.addTo();
+						return cam.dots;
+					}
+			
+					cam.handTrack = function(results) {
+						if (!cam.dots) cam.prepareTrack();
+			
+						if (cam._hand==LEFT || cam._hand==BOTH) cam.leftFinger.check = false;
+						if (cam._hand==RIGHT || cam._hand==BOTH) cam.rightFinger.check = false;				
+						var finger, thumb;
+			
+						zim.loop(results, r=>{
+							// https://docs.ml5js.org/assets/handpose-keypoints-macam.png
+							if ((cam._hand==LEFT || cam._hand==BOTH) && r.handedness=="Left") {		
+								finger = cam.leftFinger;
+								thumb = cam.leftThumb;
+								finger.check = true;
+								finger.desiredX = r.index_finger_tip.x*cam.scale+cam.x;
+								finger.desiredY = r.index_finger_tip.y*cam.scale+cam.y;
+								thumb.desiredX = r.thumb_tip.x*cam.scale+cam.x;
+								thumb.desiredY = r.thumb_tip.y*cam.scale+cam.y;		
+								thumb.otherX = r.pinky_finger_tip.x*cam.scale+cam.x;			
+								thumb.otherY = r.pinky_finger_tip.y*cam.scale+cam.y;			
+							} else if ((cam._hand==RIGHT || cam._hand==BOTH) && r.handedness=="Right") {
+								finger = cam.rightFinger;
+								thumb = cam.rightThumb;
+								finger.check = true;
+								finger.desiredX = r.index_finger_tip.x*cam.scale+cam.x;
+								finger.desiredY = r.index_finger_tip.y*cam.scale+cam.y;
+								thumb.desiredX = r.thumb_tip.x*cam.scale+cam.x;
+								thumb.desiredY = r.thumb_tip.y*cam.scale+cam.y;	
+								thumb.otherX = r.pinky_finger_tip.x*cam.scale+cam.x;			
+								thumb.otherY = r.pinky_finger_tip.y*cam.scale+cam.y;
+							}
+						});
+			
+						if (cam._hand==LEFT || cam._hand==BOTH) checkFinger(cam.leftFinger, cam.leftThumb, cam.leftPinch, 1);
+						if (cam._hand==RIGHT || cam._hand==BOTH) checkFinger(cam.rightFinger, cam.rightThumb, cam.rightPinch, 2);
+			
+						function checkFinger(finger, thumb, pinch, index) {
+			
+							if (finger.check) {			
+								finger.visible = thumb.visible = true;			
+								if (!finger.active) {	
+									finger.active = true;
+									finger.loc(finger.desiredX, finger.desiredY, cam.dots);
+									finger.dampX.immediate(finger.desiredX);
+									finger.dampY.immediate(finger.desiredY);	
+									thumb.loc(thumb.desiredX, thumb.desiredY, cam.dots);
+									thumb.dampX.immediate(thumb.desiredX);
+									thumb.dampY.immediate(thumb.desiredY);	
+									if (that._cursorMode) that.replaceCursor = true;	
+									that.dispatchEvent("handon");	
+								}
+								if (finger.remove) {
+									finger.remove = false;
+									clearTimeout(finger.timeout);
+									finger.timeout = null;
+								}
+							} else {		
+								finger.visible = thumb.visible = pinch.visible = false;		
+								if (!finger.remove) {
+									finger.remove = true;
+									if (finger.timeout) {
+										clearTimeout(finger.timeout);
+										finger.timeout = null;
+									}
+									// could be a glitch so leave some time to make sure really no cursor
+									finger.timeout = setTimeout(function(){
+										finger.active = false;
+										finger.removeFrom();
+										thumb.removeFrom();                                    
+										if (pinch.active) {                                                
+											if (that._replaceCursor) createjs.handleRemotePointer(null, null, "up", null, S, index); 
+											cam.dispatchEvent("handup");
+										}
+										pinch.active = false;
+										pinch.removeFrom();
+										// if there is leftFinter and !leftFinger.active
+										if (that._cursorMode != true) {
+
+											// if (that.leftFinger && that.rightFinger) {
+											//     if (!that.leftFinger.active && !that.rightFinger.active) that.replaceCursor = false;                                   
+											// } else if (that.leftFinger) {
+											//     if (!that.leftFinger.active) that.replaceCursor = false;
+											// } else if (that.rightFinger) {
+											//     if (!that.rightFinger.active) that.replaceCursor = false;
+											// } else {
+											//     that.replaceCursor = false; 
+											// }
+
+											var active = (that.leftHand && that.leftHand.active==true) || (that.rightHand && that.rightHand.active==true);
+											if (!active) that.replaceCursor = false; 
+										}
+										that.dispatchEvent("handoff");
+									}, cam.gapTime*1000); 
+								}
+							}
+						}
+			
+						return cam;
+					}	              
+					
+					that.getDistance = function() {
+						var left = null;
+						var right = null;
+						if ((cam.hand==LEFT || cam.hand==BOTH) && cam.leftFinger.active) left = zim.dist(cam.leftFinger, cam.leftThumb);
+						if ((cam.hand==RIGHT || cam.hand==BOTH) && cam.rightFinger.active) right = zim.dist(cam.rightFinger, cam.rightThumb);
+						return {left:left, right:right};
+					}
+
+					that.getAngle = function() {
+						var left = null;
+						var right = null;
+						if ((cam.hand==LEFT || cam.hand==BOTH) && cam.leftFinger.active) left = zim.angle(cam.leftThumb, cam.leftFinger);
+						if ((cam.hand==RIGHT || cam.hand==BOTH) && cam.rightFinger.active) right = zim.angle(cam.rightThumb, cam.rightFinger);
+						return {left:left, right:right};
+					}
+			
+
+					// END ML5 SUPPORT
 					
 					that.ready = true;	
 					that.dispatchEvent("ready");                        

@@ -1,6 +1,6 @@
 {
   "name": "@zimjs/cam",
-  "version": "1.2.4",
+  "version": "1.3.0",
   "description": "Cam module for ZIM JavaScript Canvas Framework",
   "main": "index.js",
   "types": "index.d.ts",
@@ -20,16 +20,19 @@
     "motion",
     "capture",
     "zim",
-    "zimjs"
+    "zimjs",
+    "ML5",
+    "Hand Tracking",
+    "Pinch Tracking"
   ],
   "author": "Dr Abstract",
   "license": "MIT",
   "devDependencies": {
     "typescript": "^5.3.3",
-    "zimjs": "^17.3.3"
+    "zimjs": "^18.0.0"
   },
   "peerDependencies": {
-    "zimjs": "^17.3.3"
+    "zimjs": "^18.0.0"
   }
   
 }

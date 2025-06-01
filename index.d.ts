@@ -13,11 +13,32 @@ declare namespace zim {
 		snapshot():Bitmap
 		keyOut(color?: string|[string], tolerance?: number, replacement?: string|[string]):this
 		setFacingMode(mode?: string):this
-        readonly tag:HTMLVideoElement
+		getCanvas():this
+		forgetCanvas():this
+		prepareTrack(width?:number, height?:number, hand?:string, pinchColor?:string, pinchHide?:boolean, leftColor?:string, rightColor?:string, alpha?:number, damp?:number, gapTime?:number, tapTime?:number, cursorMode?:string, toggleReplace?:boolean):zim.Container
+        handTrack(ML5Results:{}):this
+        getDistance():{left:number, right:number}
+        getAngle():{left:number, right:number}
+		readonly tag:HTMLVideoElement
 		readonly display:Container
 		paused:boolean
 		flipped:boolean
-		readonly facingMode:string       
+		readonly facingMode:string		
+		cursorMode:string
+		replaceCursor:boolean
+		toggleReplace:boolean
+		hand:string
+		handScale:number
+		gapTime:number
+		tapTime:number
+		readonly dots:zim.Container
+		readonly leftFinger:zim.Circle
+		readonly leftThumb:zim.Circle
+		readonly leftPinch:zim.Circle
+		readonly rightFinger:zim.Circle
+		readonly rightThumb:zim.Circle
+		readonly rightPinch:zim.Circle
+		readonly pinchTicker:zim.Ticker
     }
 
 	export class CamMotion extends Container {
